@@ -13,7 +13,7 @@ export interface ChecklistItem {
   completed: boolean;
 }
 
-// Added JournalEntry interface to resolve the import error in components/Journal.tsx
+// Added JournalEntry to fix import error in components/Journal.tsx
 export interface JournalEntry {
   text: string;
   mood: number | null;

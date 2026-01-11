@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, CheckCircle2, Circle, ListTodo, FileText, ChevronRight, Search, Filter, SortAsc } from 'lucide-react';
+import { Plus, Trash2, CheckCircle2, Circle, ListTodo, FileText, ChevronRight, Search, SortAsc } from 'lucide-react';
 import { Task, ChecklistItem } from '../types';
 
 interface DashboardProps {
