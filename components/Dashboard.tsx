@@ -1,9 +1,12 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, CheckCircle2, Circle, ListTodo, FileText, ChevronRight, Search, SortAsc } from 'lucide-react';
+import { Plus, Trash2, CheckCircle2, Circle, ListTodo, FileText, ChevronRight, Search, SortAsc, ChevronLeft, Calendar } from 'lucide-react';
 import { Task, ChecklistItem } from '../types';
+import { getTodayDateString } from '../utils';
 
 interface DashboardProps {
+  selectedDate: string;
+  onDateChange: (date: string) => void;
   tasks: Task[];
   onAddTask: (text: string, hour: number) => void;
   onToggleTask: (id: string) => void;
@@ -20,6 +23,7 @@ type StatusFilter = 'all' | 'completed' | 'pending';
 type SortOption = 'none' | 'text' | 'status';
 
 const Dashboard: React.FC<DashboardProps> = ({ 
+  selectedDate, onDateChange,
   tasks, onAddTask, onToggleTask, onDeleteTask,
   notes, onUpdateNotes,
   checklist, onAddChecklistItem, onToggleChecklistItem, onDeleteChecklistItem
@@ -39,9 +43,10 @@ const Dashboard: React.FC<DashboardProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  const day = currentTime.getDate();
-  const weekday = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(currentTime);
-  const monthYear = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(currentTime);
+  const viewDate = new Date(selectedDate);
+  const day = viewDate.getDate();
+  const weekday = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(viewDate);
+  const monthYear = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(viewDate);
 
   const handleTaskSubmit = (hour: number) => {
     if (!taskInput.trim()) return;
@@ -55,6 +60,12 @@ const Dashboard: React.FC<DashboardProps> = ({
     if (!checkInput.trim()) return;
     onAddChecklistItem(checkInput);
     setCheckInput('');
+  };
+
+  const changeDate = (offset: number) => {
+    const nextDate = new Date(selectedDate);
+    nextDate.setDate(nextDate.getDate() + offset);
+    onDateChange(nextDate.toISOString().split('T')[0]);
   };
 
   const formatHour = (h: number) => {
@@ -81,30 +92,84 @@ const Dashboard: React.FC<DashboardProps> = ({
     });
   }, [tasks, searchTerm, statusFilter, sortBy]);
 
+  const isToday = selectedDate === getTodayDateString();
+
   return (
     <div className="space-y-8 max-w-6xl mx-auto">
-      {/* Prominent Date Header */}
-      <header className="flex flex-col md:flex-row items-center md:items-start gap-6 md:gap-8 bg-white/50 p-8 rounded-[40px] border border-pink-100/50 shadow-sm">
-        <div className="text-center md:text-left">
-          <div className="text-7xl font-black text-pink-400 leading-none">{day}</div>
-          <div className="mt-2">
-            <div className="text-xl font-bold text-pink-300 uppercase tracking-[0.2em]">{weekday}</div>
-            <div className="text-sm font-medium text-pink-200 uppercase tracking-widest">{monthYear}</div>
-          </div>
-        </div>
-        <div className="hidden md:block h-24 w-[1px] bg-pink-100 self-center opacity-50"></div>
-        <div className="flex-1 space-y-2">
-          <h2 className="text-2xl font-bold text-pink-500 italic">"Glow with the flow today, Ella."</h2>
-          <div className="flex items-center gap-4">
-            <div className="flex-1 h-3 bg-pink-50 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-pink-400 transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(244,114,182,0.3)]"
-                style={{ width: `${tasks.length > 0 ? (tasks.filter(t => t.completed).length / tasks.length) * 100 : 0}%` }}
-              ></div>
+      {/* Prominent Date Header with Navigation */}
+      <header className="bg-white/50 p-6 md:p-8 rounded-[40px] border border-pink-100/50 shadow-sm">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="flex items-center gap-4 md:gap-8">
+            <div className="text-center md:text-left relative group">
+              <div className="text-7xl font-black text-pink-400 leading-none">{day}</div>
+              <div className="mt-2">
+                <div className="text-xl font-bold text-pink-300 uppercase tracking-[0.2em]">{weekday}</div>
+                <div className="text-sm font-medium text-pink-200 uppercase tracking-widest">{monthYear}</div>
+              </div>
+              {/* Invisible date picker for quick change */}
+              <input 
+                type="date" 
+                className="absolute inset-0 opacity-0 cursor-pointer" 
+                value={selectedDate}
+                onChange={(e) => onDateChange(e.target.value)}
+              />
             </div>
-            <span className="text-pink-400 font-bold text-sm">
-              {tasks.length > 0 ? Math.round((tasks.filter(t => t.completed).length / tasks.length) * 100) : 0}% Done
-            </span>
+
+            <div className="hidden md:block h-24 w-[1px] bg-pink-100 self-center opacity-50"></div>
+
+            <div className="flex flex-col gap-2">
+               <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => changeDate(-1)}
+                    className="p-2 hover:bg-pink-100 rounded-full text-pink-400 transition-colors"
+                    title="Previous Day"
+                  >
+                    <ChevronLeft size={20} />
+                  </button>
+                  <button 
+                    onClick={() => onDateChange(getTodayDateString())}
+                    className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-all ${
+                      isToday ? 'bg-pink-400 text-white' : 'border border-pink-200 text-pink-300 hover:bg-pink-50'
+                    }`}
+                  >
+                    Today
+                  </button>
+                  <button 
+                    onClick={() => changeDate(1)}
+                    className="p-2 hover:bg-pink-100 rounded-full text-pink-400 transition-colors"
+                    title="Next Day"
+                  >
+                    <ChevronRight size={20} />
+                  </button>
+               </div>
+               <div className="relative group flex items-center gap-2 text-pink-300 text-[10px] font-bold uppercase tracking-widest">
+                  <Calendar size={14} /> 
+                  <span>Jump to Date</span>
+                  <input 
+                    type="date" 
+                    className="absolute inset-0 opacity-0 cursor-pointer" 
+                    value={selectedDate}
+                    onChange={(e) => onDateChange(e.target.value)}
+                  />
+               </div>
+            </div>
+          </div>
+
+          <div className="flex-1 w-full md:max-w-md space-y-2">
+            <h2 className="text-xl md:text-2xl font-bold text-pink-500 italic text-center md:text-right">
+              {isToday ? '"Glow with the flow today, Ella."' : `"Planning ahead for ${weekday}..."`}
+            </h2>
+            <div className="flex items-center gap-4">
+              <div className="flex-1 h-3 bg-pink-50 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-pink-400 transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(244,114,182,0.3)]"
+                  style={{ width: `${tasks.length > 0 ? (tasks.filter(t => t.completed).length / tasks.length) * 100 : 0}%` }}
+                ></div>
+              </div>
+              <span className="text-pink-400 font-bold text-sm">
+                {tasks.length > 0 ? Math.round((tasks.filter(t => t.completed).length / tasks.length) * 100) : 0}%
+              </span>
+            </div>
           </div>
         </div>
       </header>
@@ -114,7 +179,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         <div className="lg:col-span-2 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-2">
             <div className="flex items-center gap-2 text-pink-400 font-bold uppercase tracking-widest text-xs">
-              <ChevronRight size={14} /> My Schedule
+              <ChevronRight size={14} /> {isToday ? 'My Schedule' : `Schedule for ${day}/${viewDate.getMonth() + 1}`}
             </div>
 
             {/* Controls: Search, Filter, Sort */}
@@ -163,7 +228,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             <div className="h-[600px] overflow-y-auto scrollbar-hide divide-y divide-pink-50">
               {hours.map(h => {
                 const hourTasks = getProcessedTasks.filter(t => t.hour === h);
-                const isCurrentHour = currentTime.getHours() === h;
+                const isCurrentHour = isToday && currentTime.getHours() === h;
 
                 return (
                   <div key={h} className={`group flex min-h-[70px] transition-all duration-300 ${isCurrentHour ? 'bg-pink-50/50' : 'hover:bg-pink-50/20'}`}>
@@ -255,7 +320,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             <textarea
               value={notes}
               onChange={(e) => onUpdateNotes(e.target.value)}
-              placeholder="Jot down your thoughts, Ella..."
+              placeholder={`Jot down your thoughts for ${isToday ? 'today' : weekday}...`}
               className="flex-1 bg-pink-50/30 rounded-2xl p-4 text-sm text-pink-700 placeholder:text-pink-200 border-none focus:ring-2 focus:ring-pink-100 resize-none leading-relaxed"
             />
           </section>

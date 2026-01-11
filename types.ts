@@ -37,4 +37,4 @@ export interface AppState {
   dailyData: Record<string, DailyData>; // Keyed by YYYY-MM-DD
 }
 
-export type View = 'dashboard' | 'habits' | 'focus';
+export type View = 'dashboard' | 'habits' | 'focus' | 'sync';

@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, CheckSquare, Timer, Menu, X } from 'lucide-react';
+import { LayoutDashboard, CheckSquare, Timer, Menu, X, RefreshCw } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import HabitTracker from './components/HabitTracker';
 import Pomodoro from './components/Pomodoro';
+import Sync from './components/Sync';
 import { AppState, View, Task, Habit, ChecklistItem } from './types';
 import { getTodayDateString } from './utils';
 
@@ -12,6 +13,7 @@ const STORAGE_KEY = 'ella_planner_data_v2';
 const App: React.FC = () => {
   const [activeView, setActiveView] = useState<View>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(getTodayDateString());
   const [state, setState] = useState<AppState>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     return saved ? JSON.parse(saved) : {
@@ -24,8 +26,6 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }, [state]);
-
-  const today = getTodayDateString();
 
   const ensureDailyData = (prev: AppState, date: string) => {
     if (!prev.dailyData[date]) {
@@ -40,13 +40,18 @@ const App: React.FC = () => {
     return prev;
   };
 
+  const importState = (newState: AppState) => {
+    setState(newState);
+    setActiveView('dashboard');
+  };
+
   const addTask = (text: string, hour: number) => {
     const newTask: Task = {
       id: crypto.randomUUID(),
       text,
       hour,
       completed: false,
-      date: today,
+      date: selectedDate,
     };
     setState(prev => ({ ...prev, tasks: [...prev.tasks, newTask] }));
   };
@@ -67,12 +72,12 @@ const App: React.FC = () => {
 
   const updateNotes = (text: string) => {
     setState(prev => {
-      const s = ensureDailyData(prev, today);
+      const s = ensureDailyData(prev, selectedDate);
       return {
         ...s,
         dailyData: {
           ...s.dailyData,
-          [today]: { ...s.dailyData[today], notes: text }
+          [selectedDate]: { ...s.dailyData[selectedDate], notes: text }
         }
       };
     });
@@ -80,13 +85,13 @@ const App: React.FC = () => {
 
   const addChecklistItem = (text: string) => {
     setState(prev => {
-      const s = ensureDailyData(prev, today);
+      const s = ensureDailyData(prev, selectedDate);
       const newItem: ChecklistItem = { id: crypto.randomUUID(), text, completed: false };
       return {
         ...s,
         dailyData: {
           ...s.dailyData,
-          [today]: { ...s.dailyData[today], checklist: [...s.dailyData[today].checklist, newItem] }
+          [selectedDate]: { ...s.dailyData[selectedDate], checklist: [...s.dailyData[selectedDate].checklist, newItem] }
         }
       };
     });
@@ -94,14 +99,14 @@ const App: React.FC = () => {
 
   const toggleChecklistItem = (id: string) => {
     setState(prev => {
-      const s = ensureDailyData(prev, today);
+      const s = ensureDailyData(prev, selectedDate);
       return {
         ...s,
         dailyData: {
           ...s.dailyData,
-          [today]: {
-            ...s.dailyData[today],
-            checklist: s.dailyData[today].checklist.map(item => 
+          [selectedDate]: {
+            ...s.dailyData[selectedDate],
+            checklist: s.dailyData[selectedDate].checklist.map(item => 
               item.id === id ? { ...item, completed: !item.completed } : item
             )
           }
@@ -112,14 +117,14 @@ const App: React.FC = () => {
 
   const deleteChecklistItem = (id: string) => {
     setState(prev => {
-      const s = ensureDailyData(prev, today);
+      const s = ensureDailyData(prev, selectedDate);
       return {
         ...s,
         dailyData: {
           ...s.dailyData,
-          [today]: {
-            ...s.dailyData[today],
-            checklist: s.dailyData[today].checklist.filter(item => item.id !== id)
+          [selectedDate]: {
+            ...s.dailyData[selectedDate],
+            checklist: s.dailyData[selectedDate].checklist.filter(item => item.id !== id)
           }
         }
       };
@@ -155,9 +160,10 @@ const App: React.FC = () => {
     { id: 'dashboard', label: 'Today', icon: LayoutDashboard },
     { id: 'habits', label: 'Habits', icon: CheckSquare },
     { id: 'focus', label: 'Focus', icon: Timer },
+    { id: 'sync', label: 'Sync', icon: RefreshCw },
   ] as const;
 
-  const currentDailyData = state.dailyData[today] || { notes: '', checklist: [] };
+  const currentDailyData = state.dailyData[selectedDate] || { notes: '', checklist: [] };
 
   return (
     <div className="flex h-screen bg-[#fff5f7] overflow-hidden">
@@ -173,7 +179,7 @@ const App: React.FC = () => {
           {navItems.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
-              onClick={() => setActiveView(id)}
+              onClick={() => { setActiveView(id); setIsSidebarOpen(false); }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-300 ${
                 activeView === id 
                   ? 'bg-pink-100 text-pink-600 font-bold shadow-sm' 
@@ -201,7 +207,9 @@ const App: React.FC = () => {
           <div className="max-w-6xl mx-auto pb-24 md:pb-0">
             {activeView === 'dashboard' && (
               <Dashboard 
-                tasks={state.tasks.filter(t => t.date === today)}
+                selectedDate={selectedDate}
+                onDateChange={setSelectedDate}
+                tasks={state.tasks.filter(t => t.date === selectedDate)}
                 onAddTask={addTask}
                 onToggleTask={toggleTask}
                 onDeleteTask={deleteTask}
@@ -222,6 +230,12 @@ const App: React.FC = () => {
               />
             )}
             {activeView === 'focus' && <Pomodoro />}
+            {activeView === 'sync' && (
+              <Sync 
+                state={state}
+                onImport={importState}
+              />
+            )}
           </div>
         </div>
 
