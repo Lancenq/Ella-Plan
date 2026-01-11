@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, CheckSquare, Timer, Menu, X, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { LayoutDashboard, CheckSquare, Timer, Menu, X, RefreshCw, Wifi } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import HabitTracker from './components/HabitTracker';
 import Pomodoro from './components/Pomodoro';
@@ -14,6 +14,9 @@ const App: React.FC = () => {
   const [activeView, setActiveView] = useState<View>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(getTodayDateString());
+  const [isSyncing, setIsSyncing] = useState(false);
+  const lastSyncRef = useRef<string>('');
+
   const [state, setState] = useState<AppState>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     return saved ? JSON.parse(saved) : {
@@ -23,8 +26,61 @@ const App: React.FC = () => {
     };
   });
 
+  // Persist to local storage
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }, [state]);
+
+  // Cloud Sync Logic
+  useEffect(() => {
+    if (!state.syncId) return;
+
+    const pollCloud = async () => {
+      try {
+        const res = await fetch(`https://jsonblob.com/api/jsonBlob/${state.syncId}`);
+        if (!res.ok) return;
+        const cloudState = await res.json();
+        
+        // Only update if cloud is different and we haven't just pushed this exact state
+        const cloudStr = JSON.stringify(cloudState);
+        if (cloudStr !== JSON.stringify(state) && cloudStr !== lastSyncRef.current) {
+          setState(cloudState);
+          lastSyncRef.current = cloudStr;
+        }
+      } catch (e) {
+        console.error("Sync pull error:", e);
+      }
+    };
+
+    const interval = setInterval(pollCloud, 5000);
+    return () => clearInterval(interval);
+  }, [state.syncId, state]);
+
+  // Auto-push to cloud
+  useEffect(() => {
+    if (!state.syncId) return;
+
+    const pushToCloud = async () => {
+      const stateStr = JSON.stringify(state);
+      if (stateStr === lastSyncRef.current) return;
+      
+      setIsSyncing(true);
+      try {
+        await fetch(`https://jsonblob.com/api/jsonBlob/${state.syncId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: stateStr
+        });
+        lastSyncRef.current = stateStr;
+      } catch (e) {
+        console.error("Sync push error:", e);
+      } finally {
+        setTimeout(() => setIsSyncing(false), 1000);
+      }
+    };
+
+    const timeout = setTimeout(pushToCloud, 2000);
+    return () => clearTimeout(timeout);
   }, [state]);
 
   const ensureDailyData = (prev: AppState, date: string) => {
@@ -40,38 +96,38 @@ const App: React.FC = () => {
     return prev;
   };
 
-  const importState = (newState: AppState) => {
-    setState(newState);
-    setActiveView('dashboard');
+  const updateState = (updater: (prev: AppState) => AppState) => {
+    setState(prev => updater(prev));
   };
 
-  const addTask = (text: string, hour: number) => {
+  const addTask = (text: string, hour: number, imageUrl?: string) => {
     const newTask: Task = {
       id: crypto.randomUUID(),
       text,
       hour,
       completed: false,
       date: selectedDate,
+      imageUrl
     };
-    setState(prev => ({ ...prev, tasks: [...prev.tasks, newTask] }));
+    updateState(prev => ({ ...prev, tasks: [...prev.tasks, newTask] }));
   };
 
   const toggleTask = (id: string) => {
-    setState(prev => ({
+    updateState(prev => ({
       ...prev,
       tasks: prev.tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t)
     }));
   };
 
   const deleteTask = (id: string) => {
-    setState(prev => ({
+    updateState(prev => ({
       ...prev,
       tasks: prev.tasks.filter(t => t.id !== id)
     }));
   };
 
   const updateNotes = (text: string) => {
-    setState(prev => {
+    updateState(prev => {
       const s = ensureDailyData(prev, selectedDate);
       return {
         ...s,
@@ -84,7 +140,7 @@ const App: React.FC = () => {
   };
 
   const addChecklistItem = (text: string) => {
-    setState(prev => {
+    updateState(prev => {
       const s = ensureDailyData(prev, selectedDate);
       const newItem: ChecklistItem = { id: crypto.randomUUID(), text, completed: false };
       return {
@@ -98,7 +154,7 @@ const App: React.FC = () => {
   };
 
   const toggleChecklistItem = (id: string) => {
-    setState(prev => {
+    updateState(prev => {
       const s = ensureDailyData(prev, selectedDate);
       return {
         ...s,
@@ -116,7 +172,7 @@ const App: React.FC = () => {
   };
 
   const deleteChecklistItem = (id: string) => {
-    setState(prev => {
+    updateState(prev => {
       const s = ensureDailyData(prev, selectedDate);
       return {
         ...s,
@@ -133,11 +189,11 @@ const App: React.FC = () => {
 
   const addHabit = (name: string) => {
     const newHabit: Habit = { id: crypto.randomUUID(), name, completions: [] };
-    setState(prev => ({ ...prev, habits: [...prev.habits, newHabit] }));
+    updateState(prev => ({ ...prev, habits: [...prev.habits, newHabit] }));
   };
 
   const toggleHabitDate = (habitId: string, date: string) => {
-    setState(prev => ({
+    updateState(prev => ({
       ...prev,
       habits: prev.habits.map(h => {
         if (h.id === habitId) {
@@ -153,7 +209,7 @@ const App: React.FC = () => {
   };
 
   const deleteHabit = (id: string) => {
-    setState(prev => ({ ...prev, habits: prev.habits.filter(h => h.id !== id) }));
+    updateState(prev => ({ ...prev, habits: prev.habits.filter(h => h.id !== id) }));
   };
 
   const navItems = [
@@ -174,6 +230,11 @@ const App: React.FC = () => {
             <CheckSquare className="w-8 h-8" />
             <span>Ella Planner</span>
           </h1>
+          {state.syncId && (
+            <div className="mt-2 flex items-center gap-2 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-bold uppercase tracking-widest w-fit animate-pulse">
+              <Wifi size={10} /> Live Sync
+            </div>
+          )}
         </div>
         <nav className="flex-1 px-4 space-y-2">
           {navItems.map(({ id, label, icon: Icon }) => (
@@ -197,7 +258,10 @@ const App: React.FC = () => {
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Mobile Header */}
         <header className="md:hidden flex items-center justify-between p-4 bg-white border-b border-pink-50">
-          <h1 className="text-xl font-bold text-pink-500">Ella Planner</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-bold text-pink-500">Ella Planner</h1>
+            {state.syncId && <div className="w-2 h-2 bg-emerald-400 rounded-full animate-ping"></div>}
+          </div>
           <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-pink-400">
             {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
@@ -233,7 +297,8 @@ const App: React.FC = () => {
             {activeView === 'sync' && (
               <Sync 
                 state={state}
-                onImport={importState}
+                onImport={(s) => setState(s)}
+                isSyncing={isSyncing}
               />
             )}
           </div>

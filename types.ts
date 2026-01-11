@@ -5,6 +5,7 @@ export interface Task {
   hour: number; // 0-23
   completed: boolean;
   date: string; // YYYY-MM-DD
+  imageUrl?: string; // Base64 image string
 }
 
 export interface ChecklistItem {
@@ -13,7 +14,6 @@ export interface ChecklistItem {
   completed: boolean;
 }
 
-// Added JournalEntry to fix import error in components/Journal.tsx
 export interface JournalEntry {
   text: string;
   mood: number | null;
@@ -35,6 +35,7 @@ export interface AppState {
   tasks: Task[];
   habits: Habit[];
   dailyData: Record<string, DailyData>; // Keyed by YYYY-MM-DD
+  syncId?: string; // Shared ID for cloud sync
 }
 
 export type View = 'dashboard' | 'habits' | 'focus' | 'sync';

@@ -1,14 +1,14 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, CheckCircle2, Circle, ListTodo, FileText, ChevronRight, Search, SortAsc, ChevronLeft, Calendar } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Plus, Trash2, CheckCircle2, Circle, ListTodo, FileText, ChevronRight, Search, SortAsc, ChevronLeft, Calendar, Image as ImageIcon, X } from 'lucide-react';
 import { Task, ChecklistItem } from '../types';
-import { getTodayDateString } from '../utils';
+import { getTodayDateString, fileToBase64 } from '../utils';
 
 interface DashboardProps {
   selectedDate: string;
   onDateChange: (date: string) => void;
   tasks: Task[];
-  onAddTask: (text: string, hour: number) => void;
+  onAddTask: (text: string, hour: number, imageUrl?: string) => void;
   onToggleTask: (id: string) => void;
   onDeleteTask: (id: string) => void;
   notes: string;
@@ -30,8 +30,12 @@ const Dashboard: React.FC<DashboardProps> = ({
 }) => {
   const [activeHourInput, setActiveHourInput] = useState<number | null>(null);
   const [taskInput, setTaskInput] = useState('');
+  const [taskImage, setTaskImage] = useState<string | null>(null);
   const [checkInput, setCheckInput] = useState('');
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Filtering and Sorting States
   const [searchTerm, setSearchTerm] = useState('');
@@ -50,9 +54,18 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const handleTaskSubmit = (hour: number) => {
     if (!taskInput.trim()) return;
-    onAddTask(taskInput, hour);
+    onAddTask(taskInput, hour, taskImage || undefined);
     setTaskInput('');
+    setTaskImage(null);
     setActiveHourInput(null);
+  };
+
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const base64 = await fileToBase64(file);
+      setTaskImage(base64);
+    }
   };
 
   const handleCheckSubmit = (e: React.FormEvent) => {
@@ -76,7 +89,6 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const hours = Array.from({ length: 24 }, (_, i) => i);
 
-  // Filtered and Sorted Tasks Logic
   const getProcessedTasks = useMemo(() => {
     return tasks.filter(task => {
       const matchesSearch = task.text.toLowerCase().includes(searchTerm.toLowerCase());
@@ -96,7 +108,25 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   return (
     <div className="space-y-8 max-w-6xl mx-auto">
-      {/* Prominent Date Header with Navigation */}
+      {/* Image Preview Modal Overlay */}
+      {previewImage && (
+        <div 
+          className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div className="relative max-w-2xl w-full bg-white p-2 rounded-[32px] overflow-hidden shadow-2xl scale-100 animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+            <button 
+              onClick={() => setPreviewImage(null)}
+              className="absolute top-4 right-4 p-2 bg-black/50 text-white rounded-full hover:bg-black/70 transition-all"
+            >
+              <X size={20} />
+            </button>
+            <img src={previewImage} alt="Task preview" className="w-full h-auto max-h-[80vh] object-contain rounded-[24px]" />
+          </div>
+        </div>
+      )}
+
+      {/* Prominent Date Header */}
       <header className="bg-white/50 p-6 md:p-8 rounded-[40px] border border-pink-100/50 shadow-sm">
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-4 md:gap-8">
@@ -106,7 +136,6 @@ const Dashboard: React.FC<DashboardProps> = ({
                 <div className="text-xl font-bold text-pink-300 uppercase tracking-[0.2em]">{weekday}</div>
                 <div className="text-sm font-medium text-pink-200 uppercase tracking-widest">{monthYear}</div>
               </div>
-              {/* Invisible date picker for quick change */}
               <input 
                 type="date" 
                 className="absolute inset-0 opacity-0 cursor-pointer" 
@@ -119,11 +148,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
             <div className="flex flex-col gap-2">
                <div className="flex items-center gap-2">
-                  <button 
-                    onClick={() => changeDate(-1)}
-                    className="p-2 hover:bg-pink-100 rounded-full text-pink-400 transition-colors"
-                    title="Previous Day"
-                  >
+                  <button onClick={() => changeDate(-1)} className="p-2 hover:bg-pink-100 rounded-full text-pink-400 transition-colors">
                     <ChevronLeft size={20} />
                   </button>
                   <button 
@@ -134,17 +159,12 @@ const Dashboard: React.FC<DashboardProps> = ({
                   >
                     Today
                   </button>
-                  <button 
-                    onClick={() => changeDate(1)}
-                    className="p-2 hover:bg-pink-100 rounded-full text-pink-400 transition-colors"
-                    title="Next Day"
-                  >
+                  <button onClick={() => changeDate(1)} className="p-2 hover:bg-pink-100 rounded-full text-pink-400 transition-colors">
                     <ChevronRight size={20} />
                   </button>
                </div>
                <div className="relative group flex items-center gap-2 text-pink-300 text-[10px] font-bold uppercase tracking-widest">
-                  <Calendar size={14} /> 
-                  <span>Jump to Date</span>
+                  <Calendar size={14} /> <span>Jump to Date</span>
                   <input 
                     type="date" 
                     className="absolute inset-0 opacity-0 cursor-pointer" 
@@ -175,50 +195,30 @@ const Dashboard: React.FC<DashboardProps> = ({
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* 24-Hour Timeline */}
         <div className="lg:col-span-2 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-2">
             <div className="flex items-center gap-2 text-pink-400 font-bold uppercase tracking-widest text-xs">
               <ChevronRight size={14} /> {isToday ? 'My Schedule' : `Schedule for ${day}/${viewDate.getMonth() + 1}`}
             </div>
-
-            {/* Controls: Search, Filter, Sort */}
             <div className="flex flex-wrap items-center gap-2">
-              {/* Search */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-pink-200" size={14} />
                 <input 
-                  type="text" 
-                  placeholder="Search tasks..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  type="text" placeholder="Search tasks..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-9 pr-4 py-1.5 text-xs bg-white border border-pink-100 rounded-full focus:outline-none focus:ring-2 focus:ring-pink-200 text-pink-700 placeholder:text-pink-200 w-40 sm:w-48"
                 />
               </div>
-
-              {/* Status Filter */}
               <div className="flex bg-white border border-pink-100 rounded-full p-1 shadow-sm">
                 {(['all', 'pending', 'completed'] as StatusFilter[]).map((f) => (
                   <button
-                    key={f}
-                    onClick={() => setStatusFilter(f)}
-                    className={`px-3 py-1 text-[10px] font-bold uppercase rounded-full transition-all ${
-                      statusFilter === f ? 'bg-pink-400 text-white' : 'text-pink-200 hover:text-pink-400'
-                    }`}
+                    key={f} onClick={() => setStatusFilter(f)}
+                    className={`px-3 py-1 text-[10px] font-bold uppercase rounded-full transition-all ${statusFilter === f ? 'bg-pink-400 text-white' : 'text-pink-200 hover:text-pink-400'}`}
                   >
                     {f}
                   </button>
                 ))}
               </div>
-
-              {/* Sort Toggle */}
-              <button 
-                onClick={() => setSortBy(prev => prev === 'none' ? 'text' : prev === 'text' ? 'status' : 'none')}
-                className={`p-2 rounded-full border transition-all ${
-                  sortBy !== 'none' ? 'bg-pink-50 border-pink-200 text-pink-500' : 'bg-white border-pink-100 text-pink-200'
-                }`}
-                title={`Sorting: ${sortBy === 'none' ? 'None' : sortBy === 'text' ? 'Alphabetical' : 'Completion Status'}`}
-              >
+              <button onClick={() => setSortBy(prev => prev === 'none' ? 'text' : prev === 'text' ? 'status' : 'none')} className={`p-2 rounded-full border transition-all ${sortBy !== 'none' ? 'bg-pink-50 border-pink-200 text-pink-500' : 'bg-white border-pink-100 text-pink-200'}`}>
                 <SortAsc size={14} />
               </button>
             </div>
@@ -240,32 +240,59 @@ const Dashboard: React.FC<DashboardProps> = ({
 
                     <div className="flex-1 p-4 flex flex-wrap gap-2 items-center">
                       {hourTasks.map(task => (
-                        <div key={task.id} className="flex items-center gap-2 bg-white border border-pink-100 px-3 py-1.5 rounded-2xl shadow-sm animate-in zoom-in-95">
+                        <div key={task.id} className="flex items-center gap-2 bg-white border border-pink-100 px-3 py-1.5 rounded-2xl shadow-sm animate-in zoom-in-95 group/task">
                           <button onClick={() => onToggleTask(task.id)}>
                             {task.completed ? <CheckCircle2 size={16} className="text-pink-400" /> : <Circle size={16} className="text-pink-100" />}
                           </button>
+                          
+                          {task.imageUrl && (
+                            <div 
+                              className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0 cursor-pointer border border-pink-50 hover:scale-110 transition-transform"
+                              onClick={() => setPreviewImage(task.imageUrl || null)}
+                            >
+                              <img src={task.imageUrl} alt="" className="w-full h-full object-cover" />
+                            </div>
+                          )}
+
                           <span className={`text-sm ${task.completed ? 'text-pink-200 line-through' : 'text-pink-700 font-medium'}`}>{task.text}</span>
-                          <button onClick={() => onDeleteTask(task.id)} className="text-pink-100 hover:text-pink-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => onDeleteTask(task.id)} className="text-pink-100 hover:text-pink-400 opacity-0 group-hover/task:opacity-100 transition-opacity">
                             <Trash2 size={12} />
                           </button>
                         </div>
                       ))}
                       
                       {activeHourInput === h ? (
-                        <div className="flex items-center gap-2 bg-pink-50 p-1 rounded-xl border border-pink-200 shadow-inner">
-                          <input
-                            autoFocus
-                            type="text"
-                            value={taskInput}
-                            onChange={(e) => setTaskInput(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') handleTaskSubmit(h);
-                              if (e.key === 'Escape') setActiveHourInput(null);
-                            }}
-                            placeholder="Add task..."
-                            className="bg-transparent text-sm px-2 py-0.5 focus:outline-none w-32 text-pink-700 placeholder:text-pink-300"
-                          />
-                          <button onClick={() => handleTaskSubmit(h)} className="p-1 bg-pink-400 text-white rounded-lg"><Plus size={14} /></button>
+                        <div className="flex flex-col gap-2 animate-in slide-in-from-top-2">
+                           <div className="flex items-center gap-2 bg-pink-50 p-1.5 rounded-2xl border border-pink-200 shadow-inner">
+                            {taskImage && (
+                              <div className="relative w-8 h-8 rounded-lg overflow-hidden border border-pink-300">
+                                <img src={taskImage} className="w-full h-full object-cover" />
+                                <button 
+                                  onClick={() => setTaskImage(null)}
+                                  className="absolute inset-0 bg-black/40 text-white flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
+                                >
+                                  <X size={12} />
+                                </button>
+                              </div>
+                            )}
+                            <input
+                              autoFocus type="text" value={taskInput} onChange={(e) => setTaskInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleTaskSubmit(h);
+                                if (e.key === 'Escape') { setActiveHourInput(null); setTaskImage(null); }
+                              }}
+                              placeholder="What to do?"
+                              className="bg-transparent text-sm px-2 py-0.5 focus:outline-none w-32 text-pink-700 placeholder:text-pink-300"
+                            />
+                            <input type="file" hidden ref={fileInputRef} accept="image/*" onChange={handleImageChange} />
+                            <button 
+                              onClick={() => fileInputRef.current?.click()} 
+                              className={`p-1.5 rounded-lg transition-all ${taskImage ? 'text-pink-500 bg-pink-100' : 'text-pink-300 hover:bg-pink-100 hover:text-pink-500'}`}
+                            >
+                              <ImageIcon size={14} />
+                            </button>
+                            <button onClick={() => handleTaskSubmit(h)} className="p-1.5 bg-pink-400 text-white rounded-lg"><Plus size={14} /></button>
+                          </div>
                         </div>
                       ) : (
                         <button onClick={() => setActiveHourInput(h)} className="opacity-0 group-hover:opacity-100 p-2 text-pink-200 hover:text-pink-400 hover:bg-pink-50 rounded-xl transition-all">
@@ -280,13 +307,9 @@ const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </div>
 
-        {/* Side Panels: Checklist & Notes */}
         <div className="space-y-8">
-          {/* Checklist */}
           <section className="bg-white rounded-[32px] border border-pink-100 p-6 shadow-sm space-y-4">
-            <h3 className="text-lg font-black text-pink-400 flex items-center gap-2">
-              <ListTodo size={20} /> Checklist
-            </h3>
+            <h3 className="text-lg font-black text-pink-400 flex items-center gap-2"><ListTodo size={20} /> Checklist</h3>
             <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
               {checklist.map(item => (
                 <div key={item.id} className="flex items-center gap-3 group">
@@ -294,35 +317,19 @@ const Dashboard: React.FC<DashboardProps> = ({
                     {item.completed ? <CheckCircle2 size={18} className="text-pink-400" /> : <Circle size={18} className="text-pink-100" />}
                   </button>
                   <span className={`flex-1 text-sm ${item.completed ? 'text-pink-200 line-through' : 'text-pink-700'}`}>{item.text}</span>
-                  <button onClick={() => onDeleteChecklistItem(item.id)} className="opacity-0 group-hover:opacity-100 text-pink-100 hover:text-pink-400">
-                    <Trash2 size={14} />
-                  </button>
+                  <button onClick={() => onDeleteChecklistItem(item.id)} className="opacity-0 group-hover:opacity-100 text-pink-100 hover:text-pink-400"><Trash2 size={14} /></button>
                 </div>
               ))}
             </div>
             <form onSubmit={handleCheckSubmit} className="relative mt-4">
-              <input
-                type="text"
-                value={checkInput}
-                onChange={(e) => setCheckInput(e.target.value)}
-                placeholder="New item..."
-                className="w-full bg-pink-50 border-none rounded-2xl px-4 py-3 text-sm focus:ring-2 focus:ring-pink-200 text-pink-700 placeholder:text-pink-200"
-              />
-              <button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-pink-400 text-white rounded-xl shadow-md"><Plus size={16} /></button>
+              <input type="text" value={checkInput} onChange={(e) => setCheckInput(e.target.value)} placeholder="New item..." className="w-full bg-pink-50 border-none rounded-2xl px-4 py-3 text-sm focus:ring-2 focus:ring-pink-200 text-pink-700" />
+              <button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-pink-400 text-white rounded-xl"><Plus size={16} /></button>
             </form>
           </section>
 
-          {/* Notes */}
           <section className="bg-white rounded-[32px] border border-pink-100 p-6 shadow-sm flex flex-col h-[300px]">
-            <h3 className="text-lg font-black text-pink-400 flex items-center gap-2 mb-4">
-              <FileText size={20} /> Daily Notes
-            </h3>
-            <textarea
-              value={notes}
-              onChange={(e) => onUpdateNotes(e.target.value)}
-              placeholder={`Jot down your thoughts for ${isToday ? 'today' : weekday}...`}
-              className="flex-1 bg-pink-50/30 rounded-2xl p-4 text-sm text-pink-700 placeholder:text-pink-200 border-none focus:ring-2 focus:ring-pink-100 resize-none leading-relaxed"
-            />
+            <h3 className="text-lg font-black text-pink-400 flex items-center gap-2 mb-4"><FileText size={20} /> Daily Notes</h3>
+            <textarea value={notes} onChange={(e) => onUpdateNotes(e.target.value)} placeholder="Thoughts..." className="flex-1 bg-pink-50/30 rounded-2xl p-4 text-sm text-pink-700 resize-none" />
           </section>
         </div>
       </div>

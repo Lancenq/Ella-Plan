@@ -3,10 +3,18 @@ export const getTodayDateString = (): string => {
   return new Date().toISOString().split('T')[0];
 };
 
+export const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = error => reject(error);
+  });
+};
+
 export const getWeekDays = (): string[] => {
   const today = new Date();
   const days: string[] = [];
-  // Get start of week (Sunday)
   const day = today.getDay();
   const diff = today.getDate() - day;
   const startOfWeek = new Date(today.setDate(diff));
@@ -27,7 +35,6 @@ export const calculateStreak = (completions: string[]): number => {
   let currentDate = new Date();
   currentDate.setHours(0, 0, 0, 0);
 
-  // Check if today or yesterday was completed to keep streak alive
   const todayStr = getTodayDateString();
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
@@ -37,7 +44,6 @@ export const calculateStreak = (completions: string[]): number => {
     return 0;
   }
 
-  // Iterate backwards from the most recent completion
   let checkDate = completions.includes(todayStr) ? new Date() : yesterday;
   checkDate.setHours(0, 0, 0, 0);
 
