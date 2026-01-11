@@ -13,9 +13,37 @@ const Sync: React.FC<SyncProps> = ({ state, onImport }) => {
   const [status, setStatus] = useState<{ type: 'success' | 'error' | 'none', message: string }>({ type: 'none', message: '' });
   const [copied, setCopied] = useState(false);
 
-  const exportCode = btoa(JSON.stringify(state));
+  // Unicode safe base64 encoding
+  const encodeData = (data: AppState) => {
+    try {
+      const jsonString = JSON.stringify(data);
+      // We use encodeURIComponent to handle special characters, then unescape to get a string btoa can handle
+      return btoa(encodeURIComponent(jsonString).replace(/%([0-9A-F]{2})/g, (_, p1) => 
+        String.fromCharCode(parseInt(p1, 16))
+      ));
+    } catch (e) {
+      console.error("Export error:", e);
+      return "";
+    }
+  };
+
+  const decodeData = (base64: string): AppState | null => {
+    try {
+      // Inverse of the encode logic
+      const decoded = decodeURIComponent(atob(base64).split('').map(c => 
+        '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+      ).join(''));
+      return JSON.parse(decoded);
+    } catch (e) {
+      console.error("Import error:", e);
+      return null;
+    }
+  };
+
+  const exportCode = encodeData(state);
 
   const handleCopy = () => {
+    if (!exportCode) return;
     navigator.clipboard.writeText(exportCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -32,17 +60,15 @@ const Sync: React.FC<SyncProps> = ({ state, onImport }) => {
   };
 
   const handleImport = () => {
-    try {
-      const decoded = JSON.parse(atob(importCode));
-      // Basic validation
-      if (!decoded.tasks || !decoded.habits) throw new Error("Invalid data format");
-      
+    const decoded = decodeData(importCode);
+    if (decoded && decoded.tasks && decoded.habits) {
       if (window.confirm("This will overwrite your current data. Are you sure?")) {
         onImport(decoded);
         setStatus({ type: 'success', message: 'Data synced successfully!' });
         setImportCode('');
+        setTimeout(() => setStatus({ type: 'none', message: '' }), 3000);
       }
-    } catch (e) {
+    } else {
       setStatus({ type: 'error', message: 'Invalid Sync Code. Please check and try again.' });
     }
   };
@@ -70,7 +96,7 @@ const Sync: React.FC<SyncProps> = ({ state, onImport }) => {
     <div className="max-w-2xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="text-center">
         <h2 className="text-3xl font-black text-pink-500">Sync & Backup</h2>
-        <p className="text-pink-300 mt-2 uppercase tracking-widest text-xs font-bold">Connect your devices and protect your data.</p>
+        <p className="text-pink-300 mt-2 uppercase tracking-widest text-[10px] font-bold">Connect your devices and protect your data.</p>
       </div>
 
       {status.type !== 'none' && (
@@ -91,13 +117,13 @@ const Sync: React.FC<SyncProps> = ({ state, onImport }) => {
             </div>
             <div>
               <h3 className="font-black text-pink-600">Export from this device</h3>
-              <p className="text-xs text-pink-300 font-medium">Generate a code to use on another device.</p>
+              <p className="text-[10px] text-pink-300 font-bold uppercase tracking-wider">Generate a code to use on another device.</p>
             </div>
           </div>
           
           <div className="relative group">
             <div className="bg-pink-50/50 rounded-2xl p-4 pr-12 text-[10px] font-mono text-pink-300 break-all h-24 overflow-hidden select-none">
-              {exportCode}
+              {exportCode || "Loading code..."}
             </div>
             <button 
               onClick={handleCopy}
@@ -133,7 +159,7 @@ const Sync: React.FC<SyncProps> = ({ state, onImport }) => {
             </div>
             <div>
               <h3 className="font-black text-pink-600">Import to this device</h3>
-              <p className="text-xs text-pink-300 font-medium">Paste a code or upload a file from your other device.</p>
+              <p className="text-[10px] text-pink-300 font-bold uppercase tracking-wider">Paste a code or upload a file from your other device.</p>
             </div>
           </div>
 
@@ -161,8 +187,8 @@ const Sync: React.FC<SyncProps> = ({ state, onImport }) => {
       </div>
 
       <div className="p-6 bg-pink-50/50 rounded-[32px] border border-pink-100 border-dashed text-center">
-        <p className="text-xs text-pink-400 font-medium leading-relaxed">
-          💡 <span className="font-bold">Pro Tip:</span> To sync between phone and computer, copy the code on your computer, send it to your phone (via chat or email), and paste it in the import box on your phone!
+        <p className="text-[10px] text-pink-400 font-bold uppercase tracking-widest leading-relaxed">
+          💡 Pro Tip: Send code via Zalo/Messenger to sync quickly between devices.
         </p>
       </div>
     </div>
