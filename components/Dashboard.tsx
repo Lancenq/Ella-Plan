@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, CheckCircle2, Circle, ListTodo, FileText, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Plus, Trash2, CheckCircle2, Circle, ListTodo, FileText, ChevronRight, Search, Filter, SortAsc } from 'lucide-react';
 import { Task, ChecklistItem } from '../types';
 
 interface DashboardProps {
@@ -16,6 +16,9 @@ interface DashboardProps {
   onDeleteChecklistItem: (id: string) => void;
 }
 
+type StatusFilter = 'all' | 'completed' | 'pending';
+type SortOption = 'none' | 'text' | 'status';
+
 const Dashboard: React.FC<DashboardProps> = ({ 
   tasks, onAddTask, onToggleTask, onDeleteTask,
   notes, onUpdateNotes,
@@ -25,6 +28,11 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [taskInput, setTaskInput] = useState('');
   const [checkInput, setCheckInput] = useState('');
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Filtering and Sorting States
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [sortBy, setSortBy] = useState<SortOption>('none');
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
@@ -57,6 +65,22 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const hours = Array.from({ length: 24 }, (_, i) => i);
 
+  // Filtered and Sorted Tasks Logic
+  const getProcessedTasks = useMemo(() => {
+    return tasks.filter(task => {
+      const matchesSearch = task.text.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesStatus = 
+        statusFilter === 'all' ? true :
+        statusFilter === 'completed' ? task.completed :
+        !task.completed;
+      return matchesSearch && matchesStatus;
+    }).sort((a, b) => {
+      if (sortBy === 'text') return a.text.localeCompare(b.text);
+      if (sortBy === 'status') return Number(a.completed) - Number(b.completed);
+      return 0;
+    });
+  }, [tasks, searchTerm, statusFilter, sortBy]);
+
   return (
     <div className="space-y-8 max-w-6xl mx-auto">
       {/* Prominent Date Header */}
@@ -88,13 +112,57 @@ const Dashboard: React.FC<DashboardProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* 24-Hour Timeline */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center gap-2 px-2 text-pink-400 font-bold uppercase tracking-widest text-xs">
-            <ChevronRight size={14} /> My Schedule
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-2">
+            <div className="flex items-center gap-2 text-pink-400 font-bold uppercase tracking-widest text-xs">
+              <ChevronRight size={14} /> My Schedule
+            </div>
+
+            {/* Controls: Search, Filter, Sort */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-pink-200" size={14} />
+                <input 
+                  type="text" 
+                  placeholder="Search tasks..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9 pr-4 py-1.5 text-xs bg-white border border-pink-100 rounded-full focus:outline-none focus:ring-2 focus:ring-pink-200 text-pink-700 placeholder:text-pink-200 w-40 sm:w-48"
+                />
+              </div>
+
+              {/* Status Filter */}
+              <div className="flex bg-white border border-pink-100 rounded-full p-1 shadow-sm">
+                {(['all', 'pending', 'completed'] as StatusFilter[]).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setStatusFilter(f)}
+                    className={`px-3 py-1 text-[10px] font-bold uppercase rounded-full transition-all ${
+                      statusFilter === f ? 'bg-pink-400 text-white' : 'text-pink-200 hover:text-pink-400'
+                    }`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+
+              {/* Sort Toggle */}
+              <button 
+                onClick={() => setSortBy(prev => prev === 'none' ? 'text' : prev === 'text' ? 'status' : 'none')}
+                className={`p-2 rounded-full border transition-all ${
+                  sortBy !== 'none' ? 'bg-pink-50 border-pink-200 text-pink-500' : 'bg-white border-pink-100 text-pink-200'
+                }`}
+                title={`Sorting: ${sortBy === 'none' ? 'None' : sortBy === 'text' ? 'Alphabetical' : 'Completion Status'}`}
+              >
+                <SortAsc size={14} />
+              </button>
+            </div>
           </div>
+
           <div className="bg-white rounded-[32px] border border-pink-100 shadow-sm overflow-hidden">
             <div className="h-[600px] overflow-y-auto scrollbar-hide divide-y divide-pink-50">
               {hours.map(h => {
-                const hourTasks = tasks.filter(t => t.hour === h);
+                const hourTasks = getProcessedTasks.filter(t => t.hour === h);
                 const isCurrentHour = currentTime.getHours() === h;
 
                 return (
